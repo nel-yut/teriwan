@@ -1,7 +1,8 @@
-import { FAMILY_IDS, type Element, type FamilyId, type MonsterSpecies, type Rank, type ResistMult, type Stats } from '../domain/types';
+import { ART_SHAPES, type ArtShape, type Element, type MonsterSpecies, type Rank, type ResistMult, type Stats } from '../domain/types';
+import { SKILLS } from './skills';
 
-/** 設計書 §5.2。各系統 10 種、配列順 = 系統内 index。 */
-const NAMES: Record<FamilyId, string[]> = {
+/** 図鑑の並び(見た目の体型テンプレートごとに10種)。ルール上の系統は存在しない。 */
+const NAMES: Record<ArtShape, string[]> = {
   sprout: ['コケマル', 'タネピィ', 'ツルリン', 'ハナモコ', 'ネムリバナ', 'イバラコ', 'キノコロ', 'モリノコ', 'サクラニア', '樹冠王ユグラ'],
   beast: ['コロガル', 'ホシネコ', 'ツノウサ', 'ハネイヌ', 'ヤマネコダ', 'ハイエナイト', 'ガルヴォル', 'シシオウ', '雷牙レオル', '白銀獣ヴァルガ'],
   wing: ['ピヨル', 'カゼスズ', 'アカハネ', 'フクロウル', 'カササギア', 'ワタリドリ', 'カラスミラ', 'クジャラン', '嵐翼ガルダ', '天翔鳥セレス'],
@@ -14,8 +15,8 @@ const NAMES: Record<FamilyId, string[]> = {
   dragon: ['チビドラ', 'トカゲリュ', 'ハネリュ', 'ヤマリュ', 'スナドラ', 'レイリュ', 'ウミドラ', 'ガンドラ', '古竜ゼルガ', '始原竜エルド'],
 };
 
-/** 各系統の野生出現門(§4)。 */
-const FAMILY_GATE: Record<FamilyId, string> = {
+/** 体型テンプレートごとの野生出現門(§4)。 */
+const FAMILY_GATE: Record<ArtShape, string> = {
   sprout: 'gate01',
   beast: 'gate02',
   wing: 'gate02',
@@ -28,8 +29,8 @@ const FAMILY_GATE: Record<FamilyId, string> = {
   dragon: 'gate08',
 };
 
-/** 系統傾向 (HP,MP,ATK,DEF,AGI,INT) (§5.3) */
-const TENDENCY: Record<FamilyId, [number, number, number, number, number, number]> = {
+/** 成長の傾向 (HP,MP,ATK,DEF,AGI,INT)。種族ごとに ±30% ゆらす(§5.3) */
+const TENDENCY: Record<ArtShape, [number, number, number, number, number, number]> = {
   sprout: [2, 2, 1, 2, 1, 2],
   beast: [2, 1, 3, 1, 3, 0],
   wing: [1, 1, 2, 1, 3, 2],
@@ -43,7 +44,7 @@ const TENDENCY: Record<FamilyId, [number, number, number, number, number, number
 };
 
 /** 本作暫定の属性耐性。 */
-const RESIST: Record<FamilyId, Partial<Record<Element, ResistMult>>> = {
+const RESIST: Record<ArtShape, Partial<Record<Element, ResistMult>>> = {
   sprout: { fire: 1.5, water: 0.5 },
   beast: {},
   wing: { wind: 0.5, ice: 1.5 },
@@ -56,8 +57,8 @@ const RESIST: Record<FamilyId, Partial<Record<Element, ResistMult>>> = {
   dragon: { fire: 0.5, ice: 0.5 },
 };
 
-/** §8.1 系統別の初期習得技。 */
-const FAMILY_SKILLS: Record<FamilyId, [string, string, string]> = {
+/** 体型テンプレートごとの得意技(種族ごとにこれと別の技を混ぜて、技の組み合わせを重ならなくする) */
+const FAMILY_SKILLS: Record<ArtShape, [string, string, string]> = {
   sprout: ['SK19', 'SK23', 'SK27'],
   beast: ['SK01', 'SK02', 'SK26'],
   wing: ['SK11', 'SK12', 'SK22'],
@@ -102,36 +103,92 @@ export function rankOfIndex(index: number): Rank {
   return 'S';
 }
 
-function skillsForIndex(family: FamilyId, index: number): string[] {
-  const s = FAMILY_SKILLS[family];
-  if (index <= 2) return [s[0]];
-  if (index <= 6) return [s[0], s[1]];
-  return [...s];
+function hash(n: number): number {
+  n = (n ^ 61) ^ (n >>> 16);
+  n = Math.imul(n + (n << 3), 0x27d4eb2d);
+  n ^= n >>> 15;
+  n = Math.imul(n, 0x2c1b3c6d);
+  return ((n ^ (n >>> 12)) >>> 0) / 4294967296;
+}
+
+/** ランクごとに最初から使える技の習得Lv上限(強すぎる技が序盤の種族に付かないように) */
+const SKILL_LEVEL_LIMIT: Record<Rank, number> = { E: 8, D: 14, C: 24, B: 32, A: 40, S: 99 };
+const SKILL_COUNT: Record<Rank, number> = { E: 2, D: 2, C: 2, B: 3, A: 3, S: 3 };
+
+/** 種族ごとに別の技の組み合わせを割り当てる(同じ組み合わせは作らない) */
+function assignSkills(no: number, rank: Rank, shape: ArtShape, taken: Set<string>): string[] {
+  const own = FAMILY_SKILLS[shape];
+  const limit = SKILL_LEVEL_LIMIT[rank];
+  const n = SKILL_COUNT[rank];
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const salt = no * 131 + attempt * 17;
+    const wild = Array.from({ length: 6 }, (_, i) => SKILLS[Math.floor(hash(salt + i * 7) * SKILLS.length)]!.id);
+    const pool = [...new Set([...own, ...wild])]
+      .filter((id) => SKILLS.find((k) => k.id === id)!.learnLevel <= limit)
+      .sort((a, b) => hash(salt + a.charCodeAt(3) * 13 + a.charCodeAt(2)) - hash(salt + b.charCodeAt(3) * 13 + b.charCodeAt(2)));
+    // 体型テンプレートの得意技を優先して 1 つは入れる
+    const firstOwn = own.find((id) => pool.includes(id));
+    const pick = [...new Set([...(firstOwn ? [firstOwn] : []), ...pool])].slice(0, n);
+    if (pick.length === 0) continue;
+    pick.sort((a, b) => SKILLS.find((k) => k.id === a)!.learnLevel - SKILLS.find((k) => k.id === b)!.learnLevel || a.localeCompare(b));
+    const key = pick.join(',');
+    if (!taken.has(key)) {
+      taken.add(key);
+      return pick;
+    }
+  }
+  throw new Error(`could not assign unique skills for M${no}`);
+}
+
+const ELEMENTS: Element[] = ['fire', 'ice', 'wind', 'water', 'light', 'shadow', 'physical'];
+
+function tweakResist(no: number, base: Partial<Record<Element, ResistMult>>): Partial<Record<Element, ResistMult>> {
+  const out = { ...base };
+  // 種族ごとに 1 つだけ弱点か耐性を足す/入れ替える
+  const el = ELEMENTS[Math.floor(hash(no * 53) * ELEMENTS.length)]!;
+  const roll = hash(no * 59);
+  if (out[el] === undefined) out[el] = roll < 0.5 ? 0.5 : 1.5;
+  else if (roll < 0.3) delete out[el];
+  return out;
 }
 
 function build(): MonsterSpecies[] {
   const out: MonsterSpecies[] = [];
-  FAMILY_IDS.forEach((family, f) => {
-    NAMES[family].forEach((name, index) => {
-      const rank = rankOfIndex(index);
+  const takenSkills = new Set<string>();
+  ART_SHAPES.forEach((shape, f) => {
+    NAMES[shape].forEach((name, variant) => {
+      const no = f * 10 + variant + 1;
+      const rank = rankOfIndex(variant);
       const t = RANK_TEMPLATE[rank];
-      const w = TENDENCY[family].map((x) => Math.max(x, 0.5));
+      const j = (k: number, spread: number) => 1 + (hash(no * 101 + k * 13) - 0.5) * spread;
+      const w = TENDENCY[shape].map((x, k) => Math.max(x, 0.5) * j(k + 20, 0.6));
       const growthWeights: Stats = { hp: w[0]!, mp: w[1]!, atk: w[2]!, def: w[3]!, agi: w[4]!, int: w[5]! };
+      const baseStats: Stats = {
+        hp: Math.round(t.hp * j(1, 0.16)),
+        mp: Math.round(t.mp * j(2, 0.16)),
+        atk: Math.round(t.atk * j(3, 0.16)),
+        def: Math.round(t.def * j(4, 0.16)),
+        agi: Math.round(t.agi * j(5, 0.16)),
+        int: Math.round(t.int * j(6, 0.16)),
+      };
+      const anchor = (k: number) => hash((f + 1) * 977 + k * 31);
+      const traits = [0, 1, 2, 3].map((k) => Math.min(1, Math.max(0, anchor(k) * 0.6 + hash(no * 211 + k * 19) * 0.4))) as MonsterSpecies['traits'];
       out.push({
-        id: `M${String(f * 10 + index + 1).padStart(3, '0')}`,
-        family,
-        index,
+        id: `M${String(no).padStart(3, '0')}`,
+        no,
+        art: { shape, variant },
+        traits,
         name,
         rank,
-        baseStats: { hp: t.hp, mp: t.mp, atk: t.atk, def: t.def, agi: t.agi, int: t.int },
+        baseStats,
         growthWeights,
         growthPoints: t.growthPoints,
-        resistances: RESIST[family],
-        nativeSkillIds: skillsForIndex(family, index),
+        resistances: tweakResist(no, RESIST[shape]),
+        nativeSkillIds: assignSkills(no, rank, shape, takenSkills),
         recruitBase: t.recruitBase,
         wildLevelRange: t.wildLevel,
-        wildGateId: t.wildLevel ? FAMILY_GATE[family] : null,
-        assetKey: `monster/${family}_${index}`,
+        wildGateId: t.wildLevel ? FAMILY_GATE[shape] : null,
+        assetKey: `monster/M${String(no).padStart(3, '0')}`,
       });
     });
   });
@@ -140,10 +197,3 @@ function build(): MonsterSpecies[] {
 
 export const MONSTERS: MonsterSpecies[] = build();
 export const MONSTER_BY_ID: ReadonlyMap<string, MonsterSpecies> = new Map(MONSTERS.map((m) => [m.id, m]));
-
-export function monsterAt(family: FamilyId, index: number): MonsterSpecies {
-  const id = `M${String(FAMILY_IDS.indexOf(family) * 10 + index + 1).padStart(3, '0')}`;
-  const m = MONSTER_BY_ID.get(id);
-  if (!m) throw new Error(`no monster ${family}[${index}]`);
-  return m;
-}

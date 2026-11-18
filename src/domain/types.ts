@@ -6,29 +6,23 @@ export type Gender = 'M' | 'F';
 export type Rank = 'E' | 'D' | 'C' | 'B' | 'A' | 'S';
 export type Personality = 'brave' | 'careful' | 'gentle' | 'wild';
 
-/** 系統。配列順が設計書 §7.3 の系統 index。 */
-export const FAMILY_IDS = [
-  'sprout',
-  'beast',
-  'wing',
-  'scale',
-  'metal',
-  'shade',
-  'flame',
-  'frost',
-  'astral',
-  'dragon',
-] as const;
-export type FamilyId = (typeof FAMILY_IDS)[number];
+/**
+ * ドット絵の体型テンプレート(見た目の内部名)。ゲームのルール(配合・耐性・特技)には使わない。
+ * ルール上は 100 種がそれぞれ独立した種族(1 種族 = 1 系統)。
+ */
+export const ART_SHAPES = ['sprout', 'beast', 'wing', 'scale', 'metal', 'shade', 'flame', 'frost', 'astral', 'dragon'] as const;
+export type ArtShape = (typeof ART_SHAPES)[number];
 
 export type Element = 'physical' | 'fire' | 'ice' | 'wind' | 'water' | 'light' | 'shadow';
 export type ResistMult = 0 | 0.5 | 1 | 1.5;
 
 export interface MonsterSpecies {
   id: string; // M001..M100
-  family: FamilyId;
-  /** 系統内 index 0..9 */
-  index: number;
+  /** 図鑑番号 1..100 */
+  no: number;
+  art: { shape: ArtShape; variant: number };
+  /** 配合の相性ベクトル(各 0..1)。子は両親の相性に近い種族になる */
+  traits: [number, number, number, number];
   name: string;
   rank: Rank;
   baseStats: Stats;

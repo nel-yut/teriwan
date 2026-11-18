@@ -21,8 +21,13 @@ export const TOURNAMENTS: TournamentDef[] = [
   { id: 'trn5', name: '星冠杯', rank: 5, matches: 4, recommendedLevel: [35, 42], requires: 'gate08Clear', reward: 'ending' },
 ];
 
-// 設計書 §7.4 のクロス系統特殊配合(血統指定)。同系統 A×A→S は resolveBreeding が規則として扱う。
+// 特別配合(血統指定)。1 種族 = 1 系統の構成なので、S 種(M010,M020,…,M100)は次の A 種の組から作る:
+//   A_i(血統) × A_(i+1)(相手) → S_i   (A_i = M0x9 / M(x)19 …、S_i = M010 / M020 …)
+// さらに S 種同士のクロス配合(設計書 §7.4)を追加の導線として持つ。
+const A_IDS = ['M009', 'M019', 'M029', 'M039', 'M049', 'M059', 'M069', 'M079', 'M089', 'M099'];
+const S_IDS = ['M010', 'M020', 'M030', 'M040', 'M050', 'M060', 'M070', 'M080', 'M090', 'M100'];
 export const SPECIAL_RECIPES: SpecialBreedRecipe[] = [
+  ...A_IDS.map((a, i) => ({ bloodline: a, partner: A_IDS[(i + 1) % 10]!, result: S_IDS[i]! })),
   { bloodline: 'M010', partner: 'M090', result: 'M100' },
   { bloodline: 'M020', partner: 'M080', result: 'M090' },
   { bloodline: 'M030', partner: 'M070', result: 'M080' },

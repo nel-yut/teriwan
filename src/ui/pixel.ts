@@ -1,5 +1,5 @@
 import { getSpecies } from '../domain/monster';
-import type { FamilyId, MonsterSpecies } from '../domain/types';
+import type { ArtShape, MonsterSpecies } from '../domain/types';
 
 /** 24x24 のドット絵をコードで生成する。後から PNG 素材に差し替え可能(assets.ts)。 */
 const N = 24;
@@ -41,7 +41,7 @@ const shade = (c: RGB, dl: number, dh = 0): RGB => {
   return hslToRgb((h + dh + 360) % 360, Math.min(1, s), Math.max(0.06, Math.min(0.94, l + dl)));
 };
 
-const BASE: Record<FamilyId, { body: string; accent: string }> = {
+const BASE: Record<ArtShape, { body: string; accent: string }> = {
   sprout: { body: '#7bd36b', accent: '#f6e27a' },
   beast: { body: '#e0a465', accent: '#f4d8a8' },
   wing: { body: '#7fc8f0', accent: '#fff3c4' },
@@ -112,7 +112,7 @@ interface Pal {
   accentDark: RGB;
 }
 
-/** 種族ごとの見た目の個性(系統内の10種が別物に見えるよう、形・部位・模様・目・口を組み合わせる) */
+/** 種族ごとの見た目の個性(同じ体型テンプレートの10種が別物に見えるよう、形・部位・模様・目・口を組み合わせる) */
 interface Traits {
   sx: number;
   sy: number;
@@ -129,31 +129,31 @@ const RANK_SCALE = { E: 0.8, D: 0.86, C: 0.93, B: 1.0, A: 1.07, S: 1.13 } as con
 const MASKS = [0b0001, 0b0010, 0b0100, 0b1000, 0b0011, 0b0101, 0b0110, 0b1001, 0b0111, 0b1111];
 
 function traitsOf(sp: MonsterSpecies): Traits {
-  const fam = ['sprout', 'beast', 'wing', 'scale', 'metal', 'shade', 'flame', 'frost', 'astral', 'dragon'].indexOf(sp.family);
-  const seed = fam * 100 + sp.index * 7 + 13;
+  const fam = ['sprout', 'beast', 'wing', 'scale', 'metal', 'shade', 'flame', 'frost', 'astral', 'dragon'].indexOf(sp.art.shape);
+  const seed = fam * 100 + sp.art.variant * 7 + 13;
   const h = (k: number) => hash(seed * 31 + k * 977);
   const rs = RANK_SCALE[sp.rank];
   return {
     sx: rs * (0.86 + 0.28 * h(1)),
     sy: rs * (0.86 + 0.28 * h(2)),
-    mask: MASKS[sp.index]!,
-    pattern: (sp.index + fam * 2) % 6,
-    eye: (sp.index * 2 + fam) % 4,
-    mouth: (sp.index + fam) % 3,
-    acc: sp.index % 5,
+    mask: MASKS[sp.art.variant]!,
+    pattern: (sp.art.variant + fam * 2) % 6,
+    eye: (sp.art.variant * 2 + fam) % 4,
+    mouth: (sp.art.variant + fam) % 3,
+    acc: sp.art.variant % 5,
     h,
   };
 }
 
 function makePalette(sp: MonsterSpecies, t: Traits): Pal {
-  const base = BASE[sp.family];
+  const base = BASE[sp.art.shape];
   const hue = (t.h(3) - 0.5) * 90;
   const body = shade(shade(hexToRgb(base.body), (t.h(4) - 0.5) * 0.14, hue), 0);
   const accent = shade(hexToRgb(base.accent), (t.h(5) - 0.5) * 0.1, (t.h(6) - 0.5) * 120);
   return { body, light: shade(body, 0.14), dark: shade(body, -0.16, -6), outline: shade(body, -0.38, -10), accent, accentDark: shade(accent, -0.22) };
 }
 
-// ---------- 系統ごとの体型 ----------
+// ---------- 体型テンプレートごとの描画 ----------
 function drawFamily(b: Buf, sp: MonsterSpecies, p: Pal, t: Traits): { eyeY: number; eyeDX: number } {
   const cx = 11.5;
   const has = (bit: number) => (t.mask & bit) !== 0;
@@ -161,7 +161,7 @@ function drawFamily(b: Buf, sp: MonsterSpecies, p: Pal, t: Traits): { eyeY: numb
   const rx = (v: number) => Math.min(11, v * sx);
   const ry = (v: number) => Math.min(9.5, v * sy);
   const gold: RGB = [255, 216, 107];
-  switch (sp.family) {
+  switch (sp.art.shape) {
     case 'sprout': {
       const cy = 15.5;
       b.ellipse(cx, cy, rx(8.5), ry(7.5), p.body);
@@ -401,7 +401,7 @@ function render(sp: MonsterSpecies): HTMLCanvasElement {
     for (const { x, y } of bodyPix) {
       const k = (x - minX) / Math.max(1, maxX - minX) + (y - minY) / Math.max(1, maxY - minY);
       if (k > 1.2) b.set(x, y, p.dark, 1);
-      else if (k < 0.5 && hash(x * 31 + y * 17 + sp.index) > 0.15) b.set(x, y, p.light, 1);
+      else if (k < 0.5 && hash(x * 31 + y * 17 + sp.art.variant) > 0.15) b.set(x, y, p.light, 1);
     }
     const isBody = (x: number, y: number) => b.kind[y * N + x] === 1;
     const mid = Math.round((minY + maxY) / 2);
@@ -437,7 +437,7 @@ function render(sp: MonsterSpecies): HTMLCanvasElement {
       for (let y = 0; y < N; y++) if (b.get(x, y)) return y;
       return minY;
     };
-    if (sp.index >= 2) {
+    if (sp.art.variant >= 2) {
       switch (t.acc) {
         case 1: // 傷
           b.set(Math.round(11.5 - eyeDX) - 1, eyeY - 2, [255, 255, 255], 4);

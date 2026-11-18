@@ -4,7 +4,8 @@ import { GATES } from '../src/data/world';
 import { Battle, combatantFromMonster } from '../src/domain/battle';
 import { MAP_H, MAP_W, T, bossFloor, floorSeed, generateFloor, isExitReachable } from '../src/domain/dungeon';
 import { generateWildEncounter, getGate, makeEnemy } from '../src/domain/encounter';
-import { createMonster, gainExp, expToNext } from '../src/domain/monster';
+import { MONSTERS } from '../src/data/monsters';
+import { createMonster, gainExp, expToNext, getSkill } from '../src/domain/monster';
 import { Rng } from '../src/domain/rng';
 import { MemorySaveStore, type SaveStore } from '../src/infrastructure/save';
 
@@ -32,12 +33,13 @@ describe('dungeon generation', () => {
 describe('monster growth', () => {
   it('levels up, never exceeds cap, and learns skills only when requirements are met', () => {
     const rng = new Rng(1);
-    const m = createMonster(rng, { uuid: 'x', speciesId: 'M014', level: 1, gender: 'M' });
-    expect(m.knownSkillIds).toContain('SK01');
-    expect(m.knownSkillIds).not.toContain('SK02'); // Lv8 / ATK20 が必要
+    const sp = MONSTERS.find((m) => m.nativeSkillIds.some((id) => getSkill(id).learnLevel >= 4))!;
+    const late = sp.nativeSkillIds.find((id) => getSkill(id).learnLevel >= 4)!;
+    const m = createMonster(rng, { uuid: 'x', speciesId: sp.id, level: 1, gender: 'M' });
+    expect(m.knownSkillIds).not.toContain(late); // Lv・能力が足りない間は覚えない
     gainExp(m, 1e9, []);
     expect(m.level).toBe(50);
-    expect(m.knownSkillIds).toContain('SK02');
+    expect(m.knownSkillIds).toContain(late);
     expect(expToNext(10, 'E')).toBeLessThan(expToNext(11, 'E'));
   });
 });

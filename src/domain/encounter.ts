@@ -86,7 +86,7 @@ export function generateWildEncounter(rng: Rng, gate: GateDef, floor: number): C
 export function generateBossParty(rng: Rng, gate: GateDef): Combatant[] {
   const boss = getSpecies(gate.bossSpeciesId);
   const lvl = gate.recommendedLevel[1] + 2;
-  const minions = MONSTERS.filter((m) => m.family === boss.family && m.wildGateId !== null && m.rank !== 'B' && m.rank !== 'A' && m.rank !== 'S');
+  const minions = MONSTERS.filter((m) => m.wildGateId === gate.id && m.rank !== 'B' && m.rank !== 'A' && m.rank !== 'S');
   const out = [makeEnemy(rng, 'e0', boss.id, lvl, { boss: true })];
   if (minions.length) {
     for (let i = 1; i <= 2; i++) out.push(makeEnemy(rng, `e${i}`, rng.pick(minions).id, Math.max(1, lvl - 3)));

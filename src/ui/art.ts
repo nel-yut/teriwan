@@ -1,20 +1,6 @@
 import { getSpecies } from '../domain/monster';
 import { overrideUrl } from './assets';
 import { monsterPixelUrl } from './pixel';
-import type { FamilyId } from '../domain/types';
-
-export const FAMILY_NAMES: Record<FamilyId, string> = {
-  sprout: '芽精',
-  beast: '獣牙',
-  wing: '羽翼',
-  scale: '鱗甲',
-  metal: '鉱機',
-  shade: '幽影',
-  flame: '火霊',
-  frost: '氷晶',
-  astral: '星妖',
-  dragon: '古竜',
-};
 
 /** 門ごとのタイル配色 [床, 壁, 床の模様, 背景] */
 export const GATE_THEME: Record<string, [string, string, string, string]> = {

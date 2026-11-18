@@ -4,7 +4,7 @@ import { MONSTER_BY_ID } from '../../data/monsters';
 import { SLOT_COUNT, parseSave, type SaveData } from '../../infrastructure/save';
 import { getSpecies } from '../../domain/monster';
 import type { App } from '../app';
-import { FAMILY_NAMES, monsterSvg } from '../art';
+import { monsterSvg } from '../art';
 import { h } from '../dom';
 import { sfx } from '../sfx';
 
@@ -160,7 +160,7 @@ function chooseStarter(app: App): Promise<string> {
           class: 'card starter',
           onclick: async () => {
             sfx.click();
-            if (await app.confirm(`${sp.name}(${FAMILY_NAMES[sp.family]})を相棒にしますか? ♂と♀の2体を預かります。`, 'この子にする')) {
+            if (await app.confirm(`${sp.name}を相棒にしますか? ♂と♀の2体を預かります。`, 'この子にする')) {
               overlay.remove();
               resolve(o.id);
             }
@@ -168,7 +168,7 @@ function chooseStarter(app: App): Promise<string> {
         },
         h('div', { html: monsterSvg(o.id, 96) }),
         h('strong', null, sp.name),
-        h('small', null, FAMILY_NAMES[sp.family]),
+        h('small', null, `${sp.rank}ランク`),
         h('p', null, o.desc),
       );
     });

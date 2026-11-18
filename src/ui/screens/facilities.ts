@@ -4,10 +4,10 @@ import { MONSTERS } from '../../data/monsters';
 import { TOURNAMENTS, GATES } from '../../data/world';
 import { TRAINER_NAMES, tournamentOpponents } from '../../domain/encounter';
 import { computeStats, getSkill, getSpecies, monsterName, zeroStats } from '../../domain/monster';
-import { FAMILY_IDS, STAT_KEYS, type FamilyId, type StatKey } from '../../domain/types';
+import { STAT_KEYS, type Rank, type StatKey } from '../../domain/types';
 import type { MonsterInstance } from '../../infrastructure/save';
 import type { App } from '../app';
-import { FAMILY_NAMES, monsterSvg } from '../art';
+import { monsterSvg } from '../art';
 import { bar, h } from '../dom';
 import { eggPixelUrl } from '../pixel';
 import { sfx } from '../sfx';
@@ -38,7 +38,7 @@ export function partyScreen(app: App): void {
         'button',
         { class: `mon-row${partyIds.has(m.uuid) ? ' in-party' : ''}${m.currentHp <= 0 ? ' dead' : ''}`, onclick: () => void detail(m) },
         h('div', { class: 'thumb', html: monsterSvg(m.speciesId, 52) }),
-        h('div', { class: 'info' }, h('strong', null, `${monsterName(m)} ${gender(m)}`), h('small', null, `Lv${m.level} ${FAMILY_NAMES[sp.family]}/${sp.rank}${m.plus ? ` +${m.plus}` : ''}`), bar(m.currentHp, m.stats.hp)),
+        h('div', { class: 'info' }, h('strong', null, `${monsterName(m)} ${gender(m)}`), h('small', null, `Lv${m.level} ${sp.rank}ランク${m.plus ? ` +${m.plus}` : ''}`), bar(m.currentHp, m.stats.hp)),
         partyIds.has(m.uuid) ? h('em', { class: 'badge' }, 'パーティ') : null,
       );
     };
@@ -67,7 +67,7 @@ export function partyScreen(app: App): void {
     const cands = [...sp.nativeSkillIds, ...m.inheritedSkillCandidates].filter((id) => !m.knownSkillIds.includes(id)).map((id) => getSkill(id));
     const body: (Node | null)[] = [
       h('div', { class: 'center', html: monsterSvg(m.speciesId, 120) }),
-      h('p', { class: 'center' }, `${sp.name} ${gender(m)} / ${FAMILY_NAMES[sp.family]} ${sp.rank}ランク / ${PERSONALITY[m.personality]}`),
+      h('p', { class: 'center' }, `${sp.name} ${gender(m)} / ${sp.rank}ランク / ${PERSONALITY[m.personality]}`),
       h('p', { class: 'center' }, `Lv${m.level}  EXP ${m.exp}  配合値 +${m.plus}`),
       stats,
       h('h4', null, `とくぎ(${known.length}/8)`),
@@ -165,7 +165,7 @@ export function breedingScreen(app: App): void {
         preview.append(
           h('h3', null, '生まれる幻獣(予想)'),
           h('div', { class: 'center', html: monsterSvg(child.id, 96) }),
-          h('p', { class: 'center' }, `${child.name}(${FAMILY_NAMES[child.family]} / ${child.rank}ランク)`),
+          h('p', { class: 'center' }, `${child.name}(${child.rank}ランク)`),
           h('div', { class: 'stats' }, ...STAT_KEYS.map((k) => h('div', null, h('span', null, STAT_LABEL[k]), h('b', null, `${st[k]}`), pv.bonusStats![k] ? h('small', null, `(+${pv.bonusStats![k]})`) : null))),
           h('p', null, `配合値 +${pv.plus}  /  Lv上限 ${Math.min(99, 50 + pv.plus!)}`),
           h('p', { class: 'fine' }, rs.length ? `引き継ぐ技の候補: ${rs.join('、')}(Lv・能力が足りるまで使えません)` : '引き継ぐ技の候補: なし'),
@@ -173,7 +173,7 @@ export function breedingScreen(app: App): void {
           h('button', { class: 'btn primary big', onclick: () => void doBreed(ma, mb) }, '配合する'),
         );
       }
-    } else preview.append(h('p', { class: 'fine' }, '♂と♀、どちらもLv10以上の幻獣を選んでください。「血統」側の系統を子が受け継ぎます。'));
+    } else preview.append(h('p', { class: 'fine' }, '♂と♀、どちらもLv10以上の幻獣を選んでください。どんな幻獣が生まれるかは、2体の組み合わせ(と血統・相手の順序)で決まります。'));
     app.mount(
       h(
         'main',
@@ -353,11 +353,11 @@ export function arenaScreen(app: App): void {
 
 export function bestiaryScreen(app: App): void {
   const g = app.g;
-  let fam: FamilyId | 'all' = 'all';
+  let fam: Rank | 'all' = 'all';
   const seen = new Set(g.save.discoveredSpeciesIds);
   const owned = new Set(g.save.recruitedSpeciesIds);
   const draw = () => {
-    const list = MONSTERS.filter((m) => fam === 'all' || m.family === fam);
+    const list = MONSTERS.filter((m) => fam === 'all' || m.rank === fam);
     const cells = list.map((m) => {
       const state = owned.has(m.id) ? 'owned' : seen.has(m.id) ? 'seen' : 'unknown';
       return h(
@@ -373,7 +373,7 @@ export function bestiaryScreen(app: App): void {
         { class: 'screen' },
         h('h2', null, '幻獣図鑑'),
         h('p', null, `遭遇 ${seen.size}/100  /  仲間にした ${owned.size}/100`),
-        h('div', { class: 'row wrap' }, h('button', { class: `chip${fam === 'all' ? ' on' : ''}`, onclick: () => ((fam = 'all'), draw()) }, 'すべて'), ...FAMILY_IDS.map((f) => h('button', { class: `chip${fam === f ? ' on' : ''}`, onclick: () => ((fam = f), draw()) }, FAMILY_NAMES[f]))),
+        h('div', { class: 'row wrap' }, h('button', { class: `chip${fam === 'all' ? ' on' : ''}`, onclick: () => ((fam = 'all'), draw()) }, 'すべて'), ...(['E', 'D', 'C', 'B', 'A', 'S'] as Rank[]).map((f) => h('button', { class: `chip${fam === f ? ' on' : ''}`, onclick: () => ((fam = f), draw()) }, `${f}ランク`))),
         h('div', { class: 'dex-grid' }, cells),
         backRow(app),
       ),
@@ -386,7 +386,7 @@ export function bestiaryScreen(app: App): void {
     const base = computeStats(sp, 1, zeroStats());
     await app.modal(`${sp.id} ${sp.name}`, [
       h('div', { class: 'center', html: monsterSvg(id, 110) }),
-      h('p', { class: 'center' }, `${FAMILY_NAMES[sp.family]} / ${sp.rank}ランク`),
+      h('p', { class: 'center' }, `${sp.rank}ランク`),
       h('div', { class: 'stats' }, ...STAT_KEYS.map((k) => h('div', null, h('span', null, STAT_LABEL[k]), h('b', null, `${base[k]}`)))),
       h('p', null, `固有の技: ${sp.nativeSkillIds.map((s) => getSkill(s).name).join('、')}`),
       h('p', { class: 'fine' }, gate ? `生息: ${gate.name}(Lv${sp.wildLevelRange![0]}〜)` : '野生では見つからない。配合で生まれる。'),

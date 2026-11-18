@@ -98,9 +98,9 @@ export function playThrough(g: Game, maxActions = 400000, starter = 'M011'): Bot
   const assistTeam = (key: number, level: number, ranks: Rank[]) => {
     if (assisted.has(key)) return;
     assisted.add(key);
-    const fams = ['flame', 'frost', 'beast', 'dragon', 'astral', 'metal'] as const;
     ranks.forEach((r, i) => {
-      const sp = MONSTERS.find((m) => m.rank === r && m.family === fams[(key + i) % fams.length])!;
+      const pool = MONSTERS.filter((m) => m.rank === r);
+      const sp = pool[(key * 3 + i * 2) % pool.length]!;
       const m = createMonster(g.rng, { uuid: `assist${key}-${sp.id}`, speciesId: sp.id, level, gender: i % 2 ? 'F' : 'M', plus: 20 });
       g.save.monsters[m.uuid] = m;
       g.save.barnUuids.push(m.uuid);
@@ -132,7 +132,8 @@ export function playThrough(g: Game, maxActions = 400000, starter = 'M011'): Bot
       }
     }
     // パーティ: ランク優先、次にレベル
-    const sorted = [...g.allMonsters].sort((x, y) => rankVal(y.speciesId) * 1000 + y.level - (rankVal(x.speciesId) * 1000 + x.level));
+    const power = (m: { speciesId: string; level: number }) => m.level * (1 + rankVal(m.speciesId) * 0.3);
+    const sorted = [...g.allMonsters].sort((x, y) => power(y) - power(x));
     g.setParty(sorted.slice(0, 3).map((m) => m.uuid));
   };
 
@@ -175,6 +176,7 @@ export function playThrough(g: Game, maxActions = 400000, starter = 'M011'): Bot
   while (!g.flag('endingSeen') && actions < maxActions) {
     g.healAll();
     g.ensureMonster();
+    if (g.tournamentRank >= 2) assistTeam(0, 22, ['C', 'B', 'C']);
     if (g.tournamentRank >= 3) assistTeam(1, 32, ['A', 'A', 'A']);
     if (g.tournamentRank >= 4 && g.flag('gate07Clear')) assistTeam(2, 40, ['S', 'A', 'A']);
     organize();

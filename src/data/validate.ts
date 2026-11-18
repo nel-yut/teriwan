@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FAMILY_IDS, STAT_KEYS } from '../domain/types';
+import { ART_SHAPES, STAT_KEYS } from '../domain/types';
 import { MONSTERS } from './monsters';
 import { SKILLS } from './skills';
 import { ITEMS } from './items';
@@ -10,8 +10,9 @@ const stats = z.object(Object.fromEntries(STAT_KEYS.map((k) => [k, z.number().mi
 
 const speciesSchema = z.object({
   id: z.string().regex(/^M\d{3}$/),
-  family: z.enum(FAMILY_IDS),
-  index: z.number().int().min(0).max(9),
+  no: z.number().int().min(1).max(100),
+  art: z.object({ shape: z.enum(ART_SHAPES), variant: z.number().int().min(0).max(9) }),
+  traits: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1)]),
   name: z.string().min(1),
   rank: z.enum(['E', 'D', 'C', 'B', 'A', 'S']),
   baseStats: stats,
@@ -38,10 +39,11 @@ export function validateGameData(): string[] {
     speciesIds.add(m.id);
   }
   if (MONSTERS.length !== 100) err(`expected 100 species, got ${MONSTERS.length}`);
-  for (const f of FAMILY_IDS) {
-    const n = MONSTERS.filter((m) => m.family === f).length;
-    if (n !== 10) err(`family ${f} has ${n} species`);
-  }
+  if (new Set(MONSTERS.map((m) => m.name)).size !== MONSTERS.length) err('duplicate species name');
+  const skillSets = new Set(MONSTERS.map((m) => m.nativeSkillIds.join(',')));
+  if (skillSets.size !== MONSTERS.length) err('two species share the same native skill set');
+  const rankCount = (r: string) => MONSTERS.filter((m) => m.rank === r).length;
+  for (const [r, n] of [['E', 30], ['D', 20], ['C', 20], ['B', 10], ['A', 10], ['S', 10]] as const) if (rankCount(r) !== n) err(`rank ${r} should have ${n} species`);
 
   const skillIds = new Set(SKILLS.map((s) => s.id));
   if (skillIds.size !== SKILLS.length) err('duplicate skill id');
