@@ -50,6 +50,7 @@ export type DungeonRun = z.infer<typeof dungeonRunSchema>;
 export const saveDataSchema = z.object({
   schemaVersion: z.literal(CURRENT_SCHEMA_VERSION),
   saveId: z.string().min(1),
+  playerName: z.string().max(12).default('旅人'),
   playSeconds: z.number().min(0),
   rngState: z.number().int().min(0),
   gold: z.number().int().min(0).max(999999),
@@ -71,6 +72,7 @@ export function createNewSave(saveId: string, seed: number, now: string): SaveDa
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     saveId,
+    playerName: '旅人',
     playSeconds: 0,
     rngState: seed >>> 0,
     gold: 100,

@@ -104,24 +104,28 @@ export class Game {
 
   // ---------- 永続化 ----------
 
-  /** 状態を複製して変更し、保存に成功したら反映する(失敗時は何も変えない)。 */
-  async mutate<T>(fn: (s: SaveData) => T): Promise<T> {
-    const draft = structuredClone(this.save);
+  /**
+   * 状態を複製して変更し、保存に成功したら反映する(失敗時は何も変えない)。
+   * fn の実行中は this.save が複製を指すので、Game のメソッドをそのまま呼べる。
+   */
+  async mutate<R>(fn: () => R): Promise<R> {
+    const prev = this.save;
     const rngBefore = this.rng.getState();
-    let out: T;
+    const draft = structuredClone(prev);
+    this.save = draft;
     try {
-      out = fn(draft);
+      const out = fn();
       draft.rngState = this.rng.getState();
       draft.lastSavedAt = new Date().toISOString();
       if (this.store) await this.store.write(this.slot, draft);
+      this.lastSaveError = null;
+      return out;
     } catch (e) {
+      this.save = prev;
       this.rng.setState(rngBefore);
       this.lastSaveError = (e as Error).message;
       throw e;
     }
-    this.lastSaveError = null;
-    this.save = draft;
-    return out;
   }
 
   /** 保存のみ(進行状態は既に反映済みのとき)。失敗しても遊び続けられるようエラーは保持だけする。 */
