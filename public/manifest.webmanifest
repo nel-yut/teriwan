@@ -1,0 +1,13 @@
+{
+  "name": "幻獣綺譚 — 星渡りの門 —",
+  "short_name": "幻獣綺譚",
+  "description": "幻獣を仲間にして配合で育て、星冠杯を目指すブラウザRPG",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0e1330",
+  "theme_color": "#0e1330",
+  "lang": "ja",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
