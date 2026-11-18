@@ -112,132 +112,271 @@ interface Pal {
   accentDark: RGB;
 }
 
-function makePalette(sp: MonsterSpecies): Pal {
+/** 種族ごとの見た目の個性(系統内の10種が別物に見えるよう、形・部位・模様・目・口を組み合わせる) */
+interface Traits {
+  sx: number;
+  sy: number;
+  mask: number;
+  pattern: number;
+  eye: number;
+  mouth: number;
+  acc: number;
+  /** 0..1 の決定的な乱数 */
+  h: (k: number) => number;
+}
+
+const RANK_SCALE = { E: 0.8, D: 0.86, C: 0.93, B: 1.0, A: 1.07, S: 1.13 } as const;
+const MASKS = [0b0001, 0b0010, 0b0100, 0b1000, 0b0011, 0b0101, 0b0110, 0b1001, 0b0111, 0b1111];
+
+function traitsOf(sp: MonsterSpecies): Traits {
+  const fam = ['sprout', 'beast', 'wing', 'scale', 'metal', 'shade', 'flame', 'frost', 'astral', 'dragon'].indexOf(sp.family);
+  const seed = fam * 100 + sp.index * 7 + 13;
+  const h = (k: number) => hash(seed * 31 + k * 977);
+  const rs = RANK_SCALE[sp.rank];
+  return {
+    sx: rs * (0.86 + 0.28 * h(1)),
+    sy: rs * (0.86 + 0.28 * h(2)),
+    mask: MASKS[sp.index]!,
+    pattern: (sp.index + fam * 2) % 6,
+    eye: (sp.index * 2 + fam) % 4,
+    mouth: (sp.index + fam) % 3,
+    acc: sp.index % 5,
+    h,
+  };
+}
+
+function makePalette(sp: MonsterSpecies, t: Traits): Pal {
   const base = BASE[sp.family];
-  const hue = (sp.index - 4) * 7;
-  const body = shade(hexToRgb(base.body), 0, hue);
-  const accent = shade(hexToRgb(base.accent), 0, hue * 0.5);
+  const hue = (t.h(3) - 0.5) * 90;
+  const body = shade(shade(hexToRgb(base.body), (t.h(4) - 0.5) * 0.14, hue), 0);
+  const accent = shade(hexToRgb(base.accent), (t.h(5) - 0.5) * 0.1, (t.h(6) - 0.5) * 120);
   return { body, light: shade(body, 0.14), dark: shade(body, -0.16, -6), outline: shade(body, -0.38, -10), accent, accentDark: shade(accent, -0.22) };
 }
 
 // ---------- 系統ごとの体型 ----------
-function drawFamily(b: Buf, sp: MonsterSpecies, p: Pal): { eyeY: number; eyeDX: number } {
-  const idx = sp.index;
-  const big = 1 + idx * 0.035;
+function drawFamily(b: Buf, sp: MonsterSpecies, p: Pal, t: Traits): { eyeY: number; eyeDX: number } {
   const cx = 11.5;
+  const has = (bit: number) => (t.mask & bit) !== 0;
+  const { sx, sy } = t;
+  const rx = (v: number) => Math.min(11, v * sx);
+  const ry = (v: number) => Math.min(9.5, v * sy);
+  const gold: RGB = [255, 216, 107];
   switch (sp.family) {
     case 'sprout': {
-      b.ellipse(cx, 15, 8.5 * big, 7.5 * big, p.body);
-      b.set(11, 6, p.accentDark);
-      b.set(12, 6, p.accentDark);
-      b.set(11, 5, p.accentDark);
-      b.poly([[12, 5], [17, 2], [19, 5], [15, 7]], p.accent);
-      b.poly([[11, 5], [7, 2], [5, 5], [9, 7]], shade(p.accent, -0.08, -20));
-      if (idx >= 4) b.poly([[11.5, 2], [13, 0], [14, 3]], p.accent);
-      return { eyeY: 13, eyeDX: 3.5 };
+      const cy = 15.5;
+      b.ellipse(cx, cy, rx(8.5), ry(7.5), p.body);
+      const top = Math.round(cy - ry(7.5));
+      b.set(11, top, p.accentDark);
+      b.set(12, top, p.accentDark);
+      b.set(11, top - 1, p.accentDark);
+      b.poly([[12, top], [17, top - 3], [19, top], [15, top + 2]], p.accent);
+      b.poly([[11, top], [7, top - 3], [5, top], [9, top + 2]], shade(p.accent, -0.08, -20));
+      if (has(1)) b.poly([[11.5, top - 3], [13, top - 5], [14, top - 2]], p.accent);
+      if (has(2)) {
+        // 花
+        for (const [dx, dy] of [[-2, -1], [2, -1], [0, -3], [0, 1]] as const) b.set(11.5 + dx, top - 2 + dy, [255, 140, 170]);
+        b.set(11, top - 2, gold);
+        b.set(12, top - 2, gold);
+      }
+      if (has(4)) {
+        // キノコの傘
+        b.ellipse(cx, top + 1, rx(8), 2.6, [220, 90, 90], 2);
+        b.set(7, top, [255, 255, 255], 2);
+        b.set(12, top - 1, [255, 255, 255], 2);
+        b.set(16, top, [255, 255, 255], 2);
+      }
+      if (has(8)) {
+        b.rect(1, cy + 1, 3, cy + 2, p.dark, 2);
+        b.rect(20, cy + 1, 22, cy + 2, p.dark, 2);
+        b.set(1, cy, p.accent, 2);
+        b.set(22, cy, p.accent, 2);
+      }
+      return { eyeY: Math.round(cy - 2), eyeDX: 3.5 };
     }
     case 'beast': {
-      b.poly([[3, 9], [5, 2], [9, 7]], p.dark, 2);
-      b.poly([[20, 9], [18, 2], [14, 7]], p.dark, 2);
-      b.poly([[4, 8], [5, 4], [8, 7]], p.accent, 2);
-      b.poly([[19, 8], [18, 4], [15, 7]], p.accent, 2);
-      b.ellipse(cx, 15, 9 * big, 7.5 * big, p.body);
+      const cy = 15;
+      const earH = 4 + Math.round(t.h(7) * 4);
+      b.poly([[3, 9], [5, 9 - earH], [9, 7]], p.dark, 2);
+      b.poly([[20, 9], [18, 9 - earH], [14, 7]], p.dark, 2);
+      b.poly([[4, 8], [5, 9 - earH + 2], [8, 7]], p.accent, 2);
+      b.poly([[19, 8], [18, 9 - earH + 2], [15, 7]], p.accent, 2);
+      if (has(2)) b.ellipse(cx, cy - 1, rx(10.5), ry(8.5), p.dark, 2);
+      b.ellipse(cx, cy, rx(9), ry(7.5), p.body);
       b.rect(5, 20, 8, 22, p.body);
       b.rect(15, 20, 18, 22, p.body);
       b.ellipse(cx, 18, 4.5, 3, p.accent, 2);
-      if (idx >= 3) {
-        b.sym(4, 10, p.accentDark);
-        b.sym(4, 11, p.accentDark);
+      if (has(1)) {
+        b.poly([[19, 17], [23, 12], [23, 18], [20, 20]], p.dark, 2);
+        b.set(23, 12, p.accent, 2);
+      }
+      if (has(4)) b.poly([[11, 8], [12, 4], [13, 8]], p.accent, 2);
+      if (has(8)) {
+        b.set(8, 19, [255, 255, 255], 2);
+        b.set(15, 19, [255, 255, 255], 2);
       }
       return { eyeY: 13, eyeDX: 3.5 };
     }
     case 'wing': {
-      b.poly([[2, 11], [0, 16], [4, 21], [7, 15]], p.accent, 2);
-      b.poly([[21, 11], [23, 16], [19, 21], [16, 15]], p.accent, 2);
-      for (let i = 0; i < 3 + (idx > 5 ? 1 : 0); i++) {
-        b.sym(2 + i, 14 + i * 2, p.accentDark);
-      }
-      b.ellipse(cx, 14, 7.5 * big, 7.5 * big, p.body);
+      const wingR = has(4) ? 1.25 : 1;
+      b.poly([[2, 11], [0, 16 * wingR], [4, 21], [7, 15]], p.accent, 2);
+      b.poly([[21, 11], [23, 16 * wingR], [19, 21], [16, 15]], p.accent, 2);
+      for (let i = 0; i < 3; i++) b.sym(2 + i, 14 + i * 2, p.accentDark);
+      b.ellipse(cx, 14, rx(7.5), ry(7.5), p.body);
       b.poly([[10, 15], [13, 15], [11.5, 18]], [245, 185, 66], 2);
-      b.rect(9, 5, 14, 5, p.accent, 2);
-      if (idx >= 2) b.poly([[10, 6], [11.5, 1], [13, 6]], p.accent, 2);
+      if (has(1)) b.poly([[10, 6], [11.5, 1], [13, 6]], p.accent, 2);
+      if (has(8)) {
+        b.poly([[8, 7], [6, 3], [10, 6]], p.accentDark, 2);
+        b.poly([[15, 7], [17, 3], [13, 6]], p.accentDark, 2);
+      }
+      if (has(2)) b.poly([[10, 21], [11.5, 24], [13, 21]], p.accent, 2);
       b.sym(8, 22, [240, 170, 70], 2);
       b.sym(9, 22, [240, 170, 70], 2);
       return { eyeY: 12, eyeDX: 3 };
     }
     case 'scale': {
+      const cy = 15;
       b.ellipse(21, 17, 2.5, 1.7, p.dark, 2);
-      b.ellipse(cx - 0.5, 15, 9 * big, 6.5 * big, p.body);
+      b.ellipse(cx - 0.5, cy, rx(9), ry(6.5), p.body);
       b.ellipse(cx - 0.5, 19, 6, 2.5, p.accent, 2);
       for (let x = 6; x <= 16; x += 3) for (let y = 11; y <= 13; y += 2) b.set(x + (y % 4 === 1 ? 1 : 0), y, p.dark, 2);
-      if (idx >= 3) b.poly([[6, 10], [8, 6], [10, 9]], p.accentDark, 2);
-      if (idx >= 3) b.poly([[13, 9], [15, 6], [17, 10]], p.accentDark, 2);
+      if (has(1)) for (const x of [7, 10, 13, 16]) b.poly([[x - 1, 10], [x, 6 + (x % 3)], [x + 1, 10]], p.accentDark, 2);
+      if (has(2)) b.ellipse(cx - 0.5, 16, rx(8), ry(5), p.dark, 2);
+      if (has(4)) {
+        b.poly([[3, 14], [0, 11], [3, 18]], p.accent, 2);
+        b.poly([[20, 14], [23, 11], [20, 18]], p.accent, 2);
+      }
+      if (has(8)) b.poly([[10, 8], [11.5, 3], [13, 8]], p.accent, 2);
       b.rect(6, 21, 8, 22, p.body);
       b.rect(15, 21, 17, 22, p.body);
       return { eyeY: 13, eyeDX: 3.5 };
     }
     case 'metal': {
-      b.rect(4, 8, 19, 21, p.body);
-      b.rect(5, 7, 18, 7, p.body);
-      b.rect(5, 22, 18, 22, p.body);
-      b.rect(11, 3, 12, 6, p.dark, 2);
-      b.ellipse(cx, 2.5, 2, 2, p.accent, 2);
-      b.rect(6, 17, 17, 19, p.dark, 2);
-      b.rect(6, 17, 17, 17, p.accentDark, 2);
-      for (const [x, y] of [[5, 9], [18, 9], [5, 20], [18, 20]] as const) b.set(x, y, p.accent, 2);
-      if (idx >= 3) b.rect(2, 12, 3, 15, p.dark, 2), b.rect(20, 12, 21, 15, p.dark, 2);
-      return { eyeY: 12, eyeDX: 3.5 };
+      const w = Math.round(rx(7.5));
+      const x0 = 11 - w + 1;
+      const x1 = 12 + w - 1;
+      const top = Math.round(12 - ry(5));
+      b.rect(x0, top, x1, 21, p.body);
+      b.rect(x0 + 1, top - 1, x1 - 1, top - 1, p.body);
+      b.rect(x0 + 1, 22, x1 - 1, 22, p.body);
+      b.rect(11, top - 4, 12, top - 2, p.dark, 2);
+      b.ellipse(cx, top - 4.5, 2, 2, p.accent, 2);
+      b.rect(x0 + 2, 17, x1 - 2, 19, p.dark, 2);
+      b.rect(x0 + 2, 17, x1 - 2, 17, p.accentDark, 2);
+      for (const [x, y] of [[x0 + 1, top + 2], [x1 - 1, top + 2], [x0 + 1, 20], [x1 - 1, 20]] as const) b.set(x, y, p.accent, 2);
+      if (has(1)) {
+        b.rect(x0 - 3, 12, x0 - 1, 15, p.dark, 2);
+        b.rect(x1 + 1, 12, x1 + 3, 15, p.dark, 2);
+      }
+      if (has(2)) {
+        b.rect(x0 + 1, top - 4, x0 + 1, top - 2, p.dark, 2);
+        b.rect(x1 - 1, top - 4, x1 - 1, top - 2, p.dark, 2);
+      }
+      if (has(4)) b.rect(x0 + 1, 10, x1 - 1, 12, [60, 90, 140], 2);
+      if (has(8)) b.ellipse(cx, top, 4, 2, p.dark, 2);
+      return { eyeY: has(4) ? 10 : 12, eyeDX: 3.5 };
     }
     case 'shade': {
-      b.ellipse(cx, 11, 8.5 * big, 8 * big, p.body);
-      b.rect(3, 11, 20, 20, p.body);
+      const cy = 11;
+      b.ellipse(cx, cy, rx(8.5), ry(8), p.body);
+      b.rect(3, cy, 20, 20, p.body);
       for (let x = 3; x <= 20; x++) {
         const wave = ((x - 3) % 6) < 3 ? 22 : 20;
         for (let y = 21; y <= wave; y++) b.set(x, y, p.body);
         if (wave === 20) b.set(x, 21, null);
       }
+      if (has(1)) b.poly([[7, 7], [11.5, 0], [16, 7]], p.dark, 2);
+      if (has(2)) {
+        b.rect(0, 14, 2, 15, p.body);
+        b.rect(21, 14, 23, 15, p.body);
+      }
+      if (has(4)) {
+        b.set(2, 6, p.accent, 2);
+        b.set(21, 8, p.accent, 2);
+        b.set(1, 10, p.accent, 2);
+      }
+      if (has(8)) {
+        b.poly([[7, 5], [6, 1], [10, 4]], p.accent, 2);
+        b.poly([[16, 5], [17, 1], [13, 4]], p.accent, 2);
+      }
       b.set(11, 2, p.accent, 2);
       b.set(12, 2, p.accent, 2);
-      b.set(11, 3, p.accent, 2);
-      if (idx >= 3) b.sym(3, 13, p.accent, 2);
       return { eyeY: 11, eyeDX: 3.5 };
     }
     case 'flame': {
-      b.poly([[11.5, 0], [16, 8], [20, 13], [20, 19], [16, 22], [7, 22], [3, 19], [3, 13], [7, 8]], p.body);
-      b.poly([[11.5, 10], [15, 15], [14, 21], [9, 21], [8, 15]], p.accent, 2);
-      b.set(5, 6, p.accent, 2);
-      b.set(18, 5, p.accent, 2);
-      if (idx >= 3) b.poly([[4, 10], [2, 5], [6, 8]], p.body);
-      if (idx >= 3) b.poly([[19, 10], [21, 5], [17, 8]], p.body);
+      const k = sy;
+      b.poly([[11.5, 24 - 24 * k + 0], [16, 8 + (1 - k) * 8], [20, 13 + (1 - k) * 5], [20, 19], [16, 22], [7, 22], [3, 19], [3, 13 + (1 - k) * 5], [7, 8 + (1 - k) * 8]], p.body);
+      b.poly([[11.5, 10 + (1 - k) * 4], [15, 15], [14, 21], [9, 21], [8, 15]], p.accent, 2);
+      if (has(1)) {
+        b.poly([[4, 10], [2, 5], [6, 8]], p.body);
+        b.poly([[19, 10], [21, 5], [17, 8]], p.body);
+      }
+      if (has(2)) b.poly([[20, 18], [23, 14], [23, 20]], p.accent, 2);
+      if (has(4)) {
+        b.poly([[7, 9], [5, 5], [9, 8]], p.dark, 2);
+        b.poly([[16, 9], [18, 5], [14, 8]], p.dark, 2);
+      }
+      if (has(8)) {
+        b.set(5, 6, p.accent, 2);
+        b.set(18, 5, p.accent, 2);
+        b.set(2, 12, p.accent, 2);
+        b.set(21, 11, p.accent, 2);
+      }
       return { eyeY: 15, eyeDX: 3 };
     }
     case 'frost': {
-      b.poly([[11.5, 1], [19, 8], [19, 17], [11.5, 23], [4, 17], [4, 8]], p.body);
-      b.poly([[11.5, 1], [11.5, 23], [4, 8]], p.light, 2);
+      const k = sy;
+      b.poly([[11.5, 12 - 11 * k], [4 + (1 - sx) * 4, 8 + (1 - k) * 4], [4 + (1 - sx) * 4, 17], [11.5, 23], [19 - (1 - sx) * 4, 17], [19 - (1 - sx) * 4, 8 + (1 - k) * 4]], p.body);
+      b.poly([[11.5, 12 - 11 * k], [11.5, 23], [4, 8]], p.light, 2);
       b.poly([[11.5, 4], [16, 8], [11.5, 12]], p.accent, 2);
-      if (idx >= 3) b.poly([[2, 14], [0, 10], [4, 12]], p.accent, 2), b.poly([[21, 14], [23, 10], [19, 12]], p.accent, 2);
+      if (has(1)) {
+        b.poly([[3, 14], [0, 10], [4, 12]], p.accent, 2);
+        b.poly([[20, 14], [23, 10], [19, 12]], p.accent, 2);
+      }
+      if (has(2)) b.poly([[10, 4], [11.5, 0], [13, 4]], p.accent, 2);
+      if (has(4)) {
+        b.set(5, 20, [255, 255, 255], 2);
+        b.set(18, 20, [255, 255, 255], 2);
+        b.set(12, 21, [255, 255, 255], 2);
+      }
+      if (has(8)) for (const x of [9, 11, 13, 15]) b.rect(x, 20, x, 22 + (x % 2), p.accent, 2);
       return { eyeY: 13, eyeDX: 3 };
     }
     case 'astral': {
       const pts: [number, number][] = [];
-      for (let i = 0; i < 10; i++) {
-        const a = -Math.PI / 2 + (i * Math.PI) / 5;
-        const r = i % 2 === 0 ? 11.5 : 5.2;
+      const spikes = has(8) ? 6 : 5;
+      const outer = Math.min(11.5, 9 * (sx + sy) * 0.65);
+      for (let i = 0; i < spikes * 2; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / spikes;
+        const r = i % 2 === 0 ? outer : outer * 0.45;
         pts.push([11.5 + Math.cos(a) * r, 12.5 + Math.sin(a) * r]);
       }
       b.poly(pts, p.body);
       b.ellipse(cx, 12.5, 2.5, 2.5, p.accent, 2);
-      if (idx >= 5) b.set(2, 3, p.accent, 2), b.set(21, 4, p.accent, 2), b.set(20, 21, p.accent, 2);
+      if (has(1)) b.poly([[17, 2], [20, 4], [17, 6], [18.5, 4]], p.accent, 2);
+      if (has(2)) {
+        b.set(2, 3, p.accent, 2);
+        b.set(21, 4, p.accent, 2);
+        b.set(20, 21, p.accent, 2);
+        b.set(3, 20, p.accent, 2);
+      }
+      if (has(4)) {
+        for (let x = 1; x <= 22; x++) if (x < 5 || x > 18) b.set(x, 13 + (x < 12 ? 0 : 1), p.accentDark, 2);
+      }
       return { eyeY: 11, eyeDX: 2.5 };
     }
     case 'dragon': {
-      b.poly([[2, 8], [0, 15], [5, 18], [8, 12]], p.dark, 2);
-      b.poly([[21, 8], [23, 15], [18, 18], [15, 12]], p.dark, 2);
+      const cy = 15;
+      const wingK = has(2) ? 1.3 : 1;
+      b.poly([[2, 8], [0, 15 * wingK], [5, 18], [8, 12]], p.dark, 2);
+      b.poly([[21, 8], [23, 15 * wingK], [18, 18], [15, 12]], p.dark, 2);
       b.ellipse(21, 19, 2.5, 1.5, p.dark, 2);
-      b.ellipse(cx, 15, 8 * big, 7.5 * big, p.body);
-      b.poly([[6, 9], [4, 2], [9, 7]], p.accent, 2);
-      b.poly([[17, 9], [19, 2], [14, 7]], p.accent, 2);
+      b.ellipse(cx, cy, rx(8), ry(7.5), p.body);
+      const horn = has(1) ? 2 : 0;
+      b.poly([[6, 9], [4 - horn, 2 - horn / 2], [9, 7]], p.accent, 2);
+      b.poly([[17, 9], [19 + horn, 2 - horn / 2], [14, 7]], p.accent, 2);
       b.ellipse(cx, 19, 4, 2.5, p.accent, 2);
+      if (has(4)) for (const x of [10, 11.5, 13]) b.poly([[x - 1, 7], [x, 4], [x + 1, 7]], p.accentDark, 2);
+      if (has(8)) b.poly([[10, 17], [13, 17], [11.5, 20]], [255, 120, 60], 2);
       b.rect(6, 21, 8, 22, p.body);
       b.rect(15, 21, 17, 22, p.body);
       return { eyeY: 13, eyeDX: 3.5 };
@@ -247,8 +386,9 @@ function drawFamily(b: Buf, sp: MonsterSpecies, p: Pal): { eyeY: number; eyeDX: 
 
 function render(sp: MonsterSpecies): HTMLCanvasElement {
   const b = new Buf();
-  const p = makePalette(sp);
-  const { eyeY, eyeDX } = drawFamily(b, sp, p);
+  const t = traitsOf(sp);
+  const p = makePalette(sp, t);
+  const { eyeY, eyeDX } = drawFamily(b, sp, p, t);
 
   // 体の陰影(左上を明るく、右下を暗く)
   const bodyPix: { x: number; y: number }[] = [];
@@ -259,18 +399,68 @@ function render(sp: MonsterSpecies): HTMLCanvasElement {
     const minY = Math.min(...bodyPix.map((q) => q.y));
     const maxY = Math.max(...bodyPix.map((q) => q.y));
     for (const { x, y } of bodyPix) {
-      const t = (x - minX) / Math.max(1, maxX - minX) + (y - minY) / Math.max(1, maxY - minY);
-      if (t > 1.2) b.set(x, y, p.dark, 1);
-      else if (t < 0.5 && hash(x * 31 + y * 17 + sp.index) > 0.15) b.set(x, y, p.light, 1);
+      const k = (x - minX) / Math.max(1, maxX - minX) + (y - minY) / Math.max(1, maxY - minY);
+      if (k > 1.2) b.set(x, y, p.dark, 1);
+      else if (k < 0.5 && hash(x * 31 + y * 17 + sp.index) > 0.15) b.set(x, y, p.light, 1);
+    }
+    const isBody = (x: number, y: number) => b.kind[y * N + x] === 1;
+    const mid = Math.round((minY + maxY) / 2);
+    // 模様(種族ごとに違う)
+    switch (t.pattern) {
+      case 1: // 斑点
+        for (let i = 0; i < 5; i++) {
+          const x = minX + 2 + Math.floor(t.h(10 + i) * (maxX - minX - 3));
+          const y = mid + Math.floor((t.h(20 + i) - 0.3) * (maxY - mid));
+          if (isBody(x, y)) {
+            b.set(x, y, p.dark, 1);
+            if (isBody(x + 1, y)) b.set(x + 1, y, p.dark, 1);
+          }
+        }
+        break;
+      case 2: // 縞
+        for (let y = mid; y <= maxY - 1; y += 3) for (let x = minX; x <= maxX; x++) if (isBody(x, y)) b.set(x, y, p.dark, 1);
+        break;
+      case 3: // おなか
+        for (let y = mid + 1; y <= maxY - 1; y++) for (let x = 8; x <= 15; x++) if (isBody(x, y) && Math.abs(x - 11.5) <= 3.5 - Math.abs(y - (mid + 3)) * 0.4) b.set(x, y, shade(p.accent, -0.02), 1);
+        break;
+      case 4: // 頬
+        for (const x of [Math.round(11.5 - eyeDX) - 2, Math.round(11.5 + eyeDX) + 1]) if (isBody(x, eyeY + 2)) b.set(x, eyeY + 2, [255, 140, 150], 1);
+        break;
+      case 5: // 上半分を明るく
+        for (let y = minY; y < mid - 1; y++) for (let x = minX; x <= maxX; x++) if (isBody(x, y)) b.set(x, y, p.light, 1);
+        break;
+      default:
+        break;
+    }
+    // 小物(個体差)
+    const colTop = (x: number) => {
+      for (let y = 0; y < N; y++) if (b.get(x, y)) return y;
+      return minY;
+    };
+    if (sp.index >= 2) {
+      switch (t.acc) {
+        case 1: // 傷
+          b.set(Math.round(11.5 - eyeDX) - 1, eyeY - 2, [255, 255, 255], 4);
+          b.set(Math.round(11.5 - eyeDX), eyeY - 1, [255, 255, 255], 4);
+          b.set(Math.round(11.5 - eyeDX) + 1, eyeY, [255, 255, 255], 4);
+          break;
+        case 2: // リボン
+          b.rect(10, maxY - 3, 13, maxY - 3, [230, 70, 80], 4);
+          b.set(10, maxY - 2, [230, 70, 80], 4);
+          b.set(13, maxY - 2, [230, 70, 80], 4);
+          break;
+        case 3: // 頭のはね
+          for (const dx of [-1, 0, 1]) b.set(11 + dx + (dx > 0 ? 1 : 0), colTop(11) - 1 - (dx === 0 ? 1 : 0), p.accent, 4);
+          break;
+        case 4: // 角のこぶ
+          b.set(8, colTop(8) - 1, p.accentDark, 4);
+          b.set(15, colTop(15) - 1, p.accentDark, 4);
+          break;
+        default:
+          break;
+      }
     }
   }
-  // 模様(個体差)
-  if (sp.index % 3 === 1) for (let i = 0; i < 4; i++) {
-    const x = 7 + Math.floor(hash(sp.index * 9 + i) * 10);
-    const y = 12 + Math.floor(hash(sp.index * 5 + i * 3) * 7);
-    if (b.kind[y * N + x] === 1) b.set(x, y, p.dark, 1);
-  }
-  if (sp.index % 3 === 2) for (let x = 7; x <= 16; x++) if (b.kind[17 * N + x] === 1) b.set(x, 17, p.dark, 1);
 
   // アウトライン
   const outlined: [number, number][] = [];
@@ -282,19 +472,57 @@ function render(sp: MonsterSpecies): HTMLCanvasElement {
   }
   for (const [x, y] of outlined) b.set(x, y, p.outline, 3);
 
-  // 目
+  // 目と口(種族ごとに違う)
   const lx = Math.round(11.5 - eyeDX);
   const rx = Math.round(11.5 + eyeDX);
   const white: RGB = [255, 255, 255];
   const dark: RGB = [26, 26, 48];
   for (const [x, dir] of [[lx, -1], [rx, 1]] as const) {
-    b.set(x, eyeY, dark, 4);
-    b.set(x, eyeY + 1, dark, 4);
-    b.set(x + dir, eyeY, white, 4);
-    b.set(x + dir, eyeY + 1, dark, 4);
+    switch (t.eye) {
+      case 1: // 大きな瞳
+        b.set(x, eyeY - 1, dark, 4);
+        b.set(x, eyeY, dark, 4);
+        b.set(x, eyeY + 1, dark, 4);
+        b.set(x + dir, eyeY, dark, 4);
+        b.set(x + dir, eyeY + 1, dark, 4);
+        b.set(x + dir, eyeY - 1, white, 4);
+        break;
+      case 2: // 眠たげ(線)
+        b.set(x, eyeY + 1, dark, 4);
+        b.set(x + dir, eyeY + 1, dark, 4);
+        b.set(x - dir, eyeY + 1, dark, 4);
+        break;
+      case 3: // つり目
+        b.set(x, eyeY, dark, 4);
+        b.set(x, eyeY + 1, dark, 4);
+        b.set(x + dir, eyeY, white, 4);
+        b.set(x - dir, eyeY - 1, dark, 4);
+        b.set(x, eyeY - 1, dark, 4);
+        break;
+      default:
+        b.set(x, eyeY, dark, 4);
+        b.set(x, eyeY + 1, dark, 4);
+        b.set(x + dir, eyeY, white, 4);
+        b.set(x + dir, eyeY + 1, dark, 4);
+    }
   }
-  b.set(Math.round(11.5), eyeY + 3, dark, 4);
-  b.set(Math.round(12.5), eyeY + 3, dark, 4);
+  const my = eyeY + 3;
+  if (t.mouth === 1) {
+    b.set(11, my, dark, 4);
+    b.set(12, my, dark, 4);
+    b.set(11, my + 1, [220, 80, 90], 4);
+    b.set(12, my + 1, [220, 80, 90], 4);
+  } else if (t.mouth === 2) {
+    b.set(10, my, dark, 4);
+    b.set(11, my, dark, 4);
+    b.set(12, my, dark, 4);
+    b.set(13, my, dark, 4);
+    b.set(10, my + 1, white, 4);
+    b.set(13, my + 1, white, 4);
+  } else {
+    b.set(11, my, dark, 4);
+    b.set(12, my, dark, 4);
+  }
 
   // ランクの飾り
   if (sp.rank === 'A' || sp.rank === 'S') {
