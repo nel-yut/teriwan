@@ -46,6 +46,7 @@ function sampleSave(): SaveData {
     level: 1,
     exp: 0,
     plus: 0,
+    bonusStats: { hp: 0, mp: 0, atk: 0, def: 0, agi: 0, int: 0 },
     stats: { hp: 10, mp: 4, atk: 5, def: 5, agi: 5, int: 5 },
     currentHp: 10,
     currentMp: 4,

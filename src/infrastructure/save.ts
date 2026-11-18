@@ -15,6 +15,7 @@ export const monsterInstanceSchema = z.object({
   level: z.number().int().min(1).max(99),
   exp: z.number().min(0),
   plus: z.number().int().min(0).max(99),
+  bonusStats: stats,
   stats,
   currentHp: z.number().min(0),
   currentMp: z.number().min(0),
@@ -35,6 +36,17 @@ export const eggSchema = z.object({
   hatchProgress: z.number().min(0),
 });
 
+export const dungeonRunSchema = z.object({
+  gateId: z.string(),
+  floor: z.number().int().min(1),
+  seed: z.number().int(),
+  x: z.number().int(),
+  y: z.number().int(),
+  steps: z.number().int().min(0),
+  openedChests: z.array(z.number().int()),
+});
+export type DungeonRun = z.infer<typeof dungeonRunSchema>;
+
 export const saveDataSchema = z.object({
   schemaVersion: z.literal(CURRENT_SCHEMA_VERSION),
   saveId: z.string().min(1),
@@ -49,6 +61,7 @@ export const saveDataSchema = z.object({
   storyFlags: z.record(z.string(), z.union([z.boolean(), z.number()])),
   discoveredSpeciesIds: z.array(z.string()),
   recruitedSpeciesIds: z.array(z.string()),
+  dungeonRun: dungeonRunSchema.optional(),
   lastSavedAt: z.string(),
 });
 export type SaveData = z.infer<typeof saveDataSchema>;
