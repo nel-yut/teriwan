@@ -6,8 +6,9 @@ import { Rng } from './rng';
 import type { GateDef, Rank, TournamentDef } from './types';
 
 export const GOLD_PER_LEVEL: Record<Rank, number> = { E: 3, D: 5, C: 8, B: 13, A: 20, S: 30 };
-/** 敵 1 体あたりの経験値 = その敵Lvで次のLvに必要な経験値 × この係数(本作暫定) */
-const EXP_RATIO = 0.06;
+/** 敵 1 体あたりの経験値 = その敵Lvで次のLvに必要な経験値 × 係数 + 固定6(本作暫定) */
+/** レベルが高いほど 1 レベルに必要な戦闘回数が増える(Lv3≒4戦、Lv20≒7戦、Lv40≒11戦が目安) */
+const expRatio = (level: number) => 0.12 / (1 + level / 15);
 
 export function getGate(id: string): GateDef {
   const g = GATES.find((x) => x.id === id);
@@ -146,14 +147,14 @@ export function computeRewards(battle: Battle): BattleRewards {
   let avgEnemyLevel = 0;
   for (const e of battle.enemies) {
     const sp = getSpecies(e.speciesId);
-    exp += Math.max(1, Math.round(expToNext(e.level, sp.rank) * EXP_RATIO));
+    exp += Math.round(expToNext(e.level, sp.rank) * expRatio(e.level)) + 6;
     gold += e.level * GOLD_PER_LEVEL[sp.rank];
     avgEnemyLevel += e.level;
   }
   avgEnemyLevel /= Math.max(1, battle.enemies.length);
   const avgAlly = battle.allies.reduce((a, c) => a + c.level, 0) / Math.max(1, battle.allies.length);
-  const factor = Math.min(2, Math.max(0.3, 1 + (avgEnemyLevel - avgAlly) * 0.08));
-  return { expPerAlly: Math.max(1, Math.round(exp * factor)), gold: Math.round(gold), hatchPoints: Math.max(1, Math.round(exp * factor)) };
+  const factor = Math.min(2, Math.max(0.5, 1 + (avgEnemyLevel - avgAlly) * 0.08));
+  return { expPerAlly: Math.max(1, Math.round(exp * factor)), gold: Math.round(gold), hatchPoints: 8 + Math.round(exp * factor * 0.25) };
 }
 
 /** 加入判定(§6.4)。最大 1 体。成功したら敵 Combatant を返す。 */
