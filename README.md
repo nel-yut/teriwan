@@ -26,6 +26,12 @@ npm run build      # dist/ に静的ファイルを出力(Service Worker のプ�
 npm run preview    # ビルド結果をローカルで確認
 ```
 
+### GitHub Pages で公開する
+
+1. `main` ブランチに変更を取り込む(`.github/workflows/pages.yml` が `main` への push で自動デプロイします)
+2. リポジトリの Settings → Pages → Build and deployment → Source を **GitHub Actions** にする
+3. Actions タブでデプロイ完了を待つと、`https://<ユーザー名>.github.io/teriwan/` で遊べます(スマホ可・HTTPS なのでオフライン対応も有効)
+
 `dist/` を任意の静的ホスティング(GitHub Pages など。相対パスで動作)に置けば公開できます。HTTPS(または localhost)でのみ Service Worker が有効になります。
 
 ### ドット絵
