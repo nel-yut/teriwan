@@ -9,6 +9,7 @@ import type { MonsterInstance } from '../../infrastructure/save';
 import type { App } from '../app';
 import { FAMILY_NAMES, monsterSvg } from '../art';
 import { bar, h } from '../dom';
+import { eggPixelUrl } from '../pixel';
 import { sfx } from '../sfx';
 import { runBattle } from './battle';
 
@@ -216,7 +217,7 @@ export function hatcheryScreen(app: App): void {
       return h(
         'div',
         { class: 'mon-row' },
-        h('div', { class: 'thumb', html: '<span style="font-size:36px">🥚</span>' }),
+        h('div', { class: 'thumb', html: `<img class="pixel" src="${eggPixelUrl()}" width="52" height="52" alt="卵">` }),
         h('div', { class: 'info' }, h('strong', null, `${sp.name}の卵 ${gender(e)}`), h('small', null, `配合値 +${e.plus}  進行 ${Math.min(100, Math.floor(e.hatchProgress))}/${HATCH_THRESHOLD}`), bar(Math.min(e.hatchProgress, HATCH_THRESHOLD), HATCH_THRESHOLD, 'exp')),
         h('button', { class: 'btn primary', disabled: !ready, onclick: () => void hatch(e.uuid) }, ready ? '孵化' : 'まだ'),
       );

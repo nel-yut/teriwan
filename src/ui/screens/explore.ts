@@ -6,7 +6,8 @@ import { MAP_H, MAP_W, T, tileAt } from '../../domain/dungeon';
 import { getGate } from '../../domain/encounter';
 import { monsterName } from '../../domain/monster';
 import type { App } from '../app';
-import { GATE_THEME, monsterSvg } from '../art';
+import { GATE_THEME, monsterImageUrl } from '../art';
+import { buildTileset } from '../tiles';
 import { bar, h } from '../dom';
 import { sfx } from '../sfx';
 import { runBattle } from './battle';
@@ -73,18 +74,21 @@ export function exploreScreen(app: App): void {
       spriteImg = img;
       draw();
     };
-    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(monsterSvg(lead.speciesId, 64));
+    img.src = monsterImageUrl(lead.speciesId);
   };
 
-  const theme = () => GATE_THEME[gate.id]!;
+  const tiles = buildTileset(gate.id);
+  const bg = GATE_THEME[gate.id]![3];
+  let facing: 1 | -1 = 1;
+  let frame = 0;
 
   const draw = () => {
     const run = g.run;
     if (!run) return;
     const map = g.currentMap();
-    const [floorC, wallC, patC, bg] = theme();
     visited.add(`${run.floor}:${run.x},${run.y}`);
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) visited.add(`${run.floor}:${run.x + dx},${run.y + dy}`);
+    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const half = Math.floor(VIEW / 2);
@@ -95,60 +99,38 @@ export function exploreScreen(app: App): void {
         const t = tileAt(map, mx, my);
         const px = vx * TILE;
         const py = vy * TILE;
+        const put = (name: keyof typeof tiles) => ctx.drawImage(tiles[name], px, py, TILE, TILE);
         if (t === T.WALL) {
-          // 周囲に床がある壁だけ描く(奥行き感)
           const near = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]].some(([ax, ay]) => tileAt(map, mx + ax!, my + ay!) !== T.WALL);
           if (!near) continue;
-          ctx.fillStyle = wallC;
-          ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = 'rgba(0,0,0,.25)';
-          ctx.fillRect(px, py + TILE - 6, TILE, 6);
-          ctx.strokeStyle = 'rgba(255,255,255,.07)';
-          ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
+          // 南側が床の壁は「壁面」、それ以外は壁の上面
+          put(tileAt(map, mx, my + 1) !== T.WALL ? 'wallFace' : 'wallTop');
           continue;
         }
-        ctx.fillStyle = (mx + my) % 2 === 0 ? floorC : patC;
-        ctx.fillRect(px, py, TILE, TILE);
-        if (t === T.UP) {
-          ctx.fillStyle = 'rgba(255,255,255,.55)';
-          ctx.font = `${TILE * 0.7}px sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('⬆', px + TILE / 2, py + TILE / 2);
-        } else if (t === T.DOWN) {
-          ctx.fillStyle = '#ffd86b';
-          ctx.font = `${TILE * 0.7}px sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('⬇', px + TILE / 2, py + TILE / 2);
-        } else if (t === T.BOSS) {
-          ctx.fillStyle = 'rgba(255,60,60,.35)';
-          ctx.beginPath();
-          ctx.arc(px + TILE / 2, py + TILE / 2, TILE * 0.45, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.font = `${TILE * 0.7}px sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillStyle = '#fff';
-          ctx.fillText('👑', px + TILE / 2, py + TILE / 2);
-        } else if (t === T.CHEST) {
+        put((mx + my) % 2 === 0 ? 'floorA' : 'floorB');
+        if (t === T.UP) put('up');
+        else if (t === T.DOWN) put('down');
+        else if (t === T.BOSS) put('boss');
+        else if (t === T.CHEST) {
           const chest = map.chests.find((c) => c.x === mx && c.y === my);
-          const opened = chest && run.openedChests.includes(chest.id);
-          ctx.font = `${TILE * 0.65}px sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(opened ? '📭' : '🎁', px + TILE / 2, py + TILE / 2);
+          put(chest && run.openedChests.includes(chest.id) ? 'chestOpen' : 'chest');
         }
       }
     }
-    // プレイヤー
+    // プレイヤー(歩くたびに上下にはずむ。進行方向で左右反転)
     const cx = half * TILE;
-    if (spriteImg) ctx.drawImage(spriteImg, cx - 2, cx - 6, TILE + 4, TILE + 4);
-    else {
+    const bob = frame % 2 === 1 ? -2 : 0;
+    if (spriteImg) {
+      ctx.save();
+      if (facing === -1) {
+        ctx.translate(cx + TILE, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(spriteImg, 0, cx - 8 + bob, TILE, TILE);
+      } else ctx.drawImage(spriteImg, cx, cx - 8 + bob, TILE, TILE);
+      ctx.restore();
+    } else {
       ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(cx + TILE / 2, cx + TILE / 2, 10, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(cx + 8, cx + 8, 16, 16);
     }
     // ミニマップ
     mctx.fillStyle = 'rgba(0,0,0,.6)';
@@ -192,6 +174,8 @@ export function exploreScreen(app: App): void {
     if (busy || !g.run) return;
     const ev = g.move(dx, dy);
     if (ev.kind === 'blocked') return;
+    if (dx !== 0) facing = dx > 0 ? 1 : -1;
+    frame += 1;
     sfx.step();
     draw();
     if (ev.kind === 'step') return;

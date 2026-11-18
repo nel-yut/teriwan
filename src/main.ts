@@ -4,6 +4,9 @@ import { baseScreen, settingsScreen } from './ui/screens/base';
 import { arenaScreen, bestiaryScreen, breedingScreen, hatcheryScreen, partyScreen, shopScreen } from './ui/screens/facilities';
 import { exploreScreen, gatesScreen } from './ui/screens/explore';
 import { titleScreen } from './ui/screens/title';
+import { monsterSvg } from './ui/art';
+import { loadAssetManifest } from './ui/assets';
+import { buildTileset } from './ui/tiles';
 import './styles.css';
 
 const root = document.getElementById('app')!;
@@ -29,7 +32,7 @@ app.screens = {
   bestiary: bestiaryScreen,
   settings: settingsScreen,
 };
-app.go('title');
+void loadAssetManifest().finally(() => app.go('title'));
 
 // ページを閉じる前に最後の状態を保存(失敗しても遊びには影響しない)
 window.addEventListener('pagehide', () => void app.game?.persist());
@@ -43,4 +46,5 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 // デバッグ用
-(window as unknown as { __app: App }).__app = app;
+(window as unknown as { __app: App; __art: unknown }).__app = app;
+(window as unknown as { __art: unknown }).__art = { monsterSvg, buildTileset };
